@@ -1,0 +1,65 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+@source "../views";
+@source "../../vendor/laravel";
+@source "../../app/Livewire";
+@source "../../app/View/Components";
+@source "../../app/Providers";
+
+@theme {
+    --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+    --color-brand-primary: #1D4ED8;
+    --color-brand-secondary: #14B8A6;
+    --color-brand-background: #F8FAFC;
+    --color-brand-surface: #FFFFFF;
+    --color-brand-border: #E2E8F0;
+    --color-brand-text-primary: #0F172A;
+    --color-brand-text-secondary: #475569;
+    --color-brand-success: #16A34A;
+    --color-brand-warning: #D97706;
+    --color-brand-danger: #DC2626;
+    --color-brand-info: #0EA5E9;
+}
+
+@layer components {
+    .btn-primary {
+        @apply bg-brand-primary text-white hover:bg-blue-800 focus:ring-4 focus:ring-blue-200 rounded-xl px-5 py-3 font-semibold transition-all duration-200 inline-flex items-center justify-center;
+        min-height: 48px;
+    }
+
+    .btn-secondary {
+        @apply bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 rounded-xl px-5 py-3 font-medium transition-all duration-200 inline-flex items-center justify-center;
+        min-height: 48px;
+    }
+
+    .btn-outline {
+        @apply bg-white text-brand-text-secondary border border-brand-border hover:bg-slate-50 rounded-xl px-5 py-3 font-medium transition-all duration-200 inline-flex items-center justify-center;
+        min-height: 48px;
+    }
+
+    .btn-destructive {
+        @apply bg-brand-danger text-white hover:bg-red-700 focus:ring-4 focus:ring-red-200 rounded-xl px-5 py-3 font-semibold transition-all duration-200 inline-flex items-center justify-center;
+        min-height: 48px;
+    }
+
+    .glass {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(10px);
+    }
+
+    .gradient-text {
+        background: linear-gradient(to right, #1D4ED8, #14B8A6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+    .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+}
