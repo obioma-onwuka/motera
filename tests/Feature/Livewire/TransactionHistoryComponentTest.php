@@ -9,9 +9,9 @@ use Livewire\Volt\Volt;
 | Transaction history component
 |--------------------------------------------------------------------------
 |
-| Name resolution: `transactions.⚡transaction-history` (⚡-prefixed name
+| Name resolution: `transactions.transaction-history` (-prefixed name
 | required — see the other test files). The app's own views reference the
-| component as `<livewire:transactions.⚡transaction-history />` (both on
+| component as `<livewire:transactions.transaction-history />` (both on
 | the dashboard with `:limit="5"` and on the transactions page).
 */
 
@@ -25,7 +25,7 @@ it('skips the cash-flow chart when a limit is set (dashboard embed)', function (
 
     Livewire::actingAs($user);
 
-    $component = Livewire::test('transactions.⚡transaction-history', ['limit' => 5]);
+    $component = Livewire::test('transactions.transaction-history', ['limit' => 5]);
 
     expect($component->get('limit'))->toBe(5);
 
@@ -71,7 +71,7 @@ it('builds a 7-day chart from the primary account ledger entries', function () {
 
     Livewire::actingAs($user);
 
-    $component = Livewire::test('transactions.⚡transaction-history');
+    $component = Livewire::test('transactions.transaction-history');
 
     $chartData = $component->viewData('chartData');
 

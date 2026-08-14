@@ -7,7 +7,9 @@ use App\Models\Transaction;
 use App\Models\KycSubmission;
 use App\Models\DepositRequest;
 use App\Models\WithdrawalRequest;
+use App\Models\CardRequest;
 use App\Enums\TransactionStatus;
+use App\Enums\AccountStatus;
 use Spatie\Activitylog\Models\Activity;
 
 new class extends Component {
@@ -22,6 +24,8 @@ new class extends Component {
             'pendingKyc' => KycSubmission::where('status', 'pending')->count(),
             'pendingDeposits' => DepositRequest::where('status', 'pending')->count(),
             'pendingWithdrawals' => WithdrawalRequest::where('status', 'pending')->count(),
+            'activeCustomers' => User::role('Customer')->whereHas('bankAccounts', fn ($q) => $q->where('status', AccountStatus::ACTIVE))->count(),
+            'pendingCardRequests' => CardRequest::where('status', 'pending')->count(),
             'recentEvents' => Activity::latest()->limit(5)->get(),
         ];
     }
@@ -29,7 +33,7 @@ new class extends Component {
 
 <div class="space-y-8">
     <!-- Top Level Platform Metrics -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
         <div class="bg-white p-6 rounded-[2rem] border border-brand-border shadow-sm">
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Users</p>
             <div class="flex items-end justify-between uppercase">
@@ -54,6 +58,26 @@ new class extends Component {
                  <div class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
                  <span class="text-sm font-black tracking-tight">HEALTHY & OPTIMIZED</span>
              </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-[2rem] border border-brand-border shadow-sm">
+            <div class="flex items-start justify-between">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Customers</p>
+                <div class="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+            </div>
+            <h3 class="text-3xl font-black text-slate-900 tracking-tight">{{ number_format($activeCustomers) }}</h3>
+        </div>
+
+        <div class="bg-white p-6 rounded-[2rem] border border-brand-border shadow-sm">
+            <div class="flex items-start justify-between">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Pending Card Requests</p>
+                <div class="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                </div>
+            </div>
+            <h3 class="text-3xl font-black tracking-tight {{ $pendingCardRequests > 0 ? 'text-brand-warning' : 'text-slate-900' }}">{{ number_format($pendingCardRequests) }}</h3>
         </div>
     </div>
 

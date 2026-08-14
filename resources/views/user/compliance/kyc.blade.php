@@ -5,6 +5,6 @@
     </x-slot>
 
     <div class="max-w-2xl mx-auto">
-        <livewire:compliance.⚡kyc-submission-form />
+        <livewire:compliance.kyc-submission-form />
     </div>
 </x-customer-layout>

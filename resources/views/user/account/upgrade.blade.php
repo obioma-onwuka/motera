@@ -5,6 +5,6 @@
     </x-slot>
 
     <div class="py-2">
-        <livewire:account.⚡tier-system />
+        <livewire:account.tier-system />
     </div>
 </x-customer-layout>

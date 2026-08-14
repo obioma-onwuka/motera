@@ -13,13 +13,13 @@ use Livewire\Volt\Volt;
 |--------------------------------------------------------------------------
 |
 | Name resolution: the component file is
-| resources/views/components/transfers/⚡internal-transfer.blade.php and
+| resources/views/components/transfers/internal-transfer.blade.php and
 | its class still extends Livewire\Volt\Component, so Volt's render()
 | looks the template up through the `volt-livewire` view namespace. That
 | namespace is registered by Volt::mount(...) below (the app's own
 | VoltServiceProvider that used to do this was deleted from the working
-| tree) and the component must be referenced by its ⚡-prefixed name so
-| the template file resolves. The non-⚡ name finds the component class
+| tree) and the component must be referenced by its -prefixed name so
+| the template file resolves. The non- name finds the component class
 | but fails to render with "View [transfers.internal-transfer] not
 | found."
 */
@@ -56,7 +56,7 @@ it('submits a transfer only once when processTransfer is called twice', function
 
     Livewire::actingAs($sender);
 
-    $component = Livewire::test('transfers.⚡internal-transfer')
+    $component = Livewire::test('transfers.internal-transfer')
         ->set('accountNumber', $recipientAccountNumber)
         ->set('amount', '100')
         ->set('pin', '1234');
@@ -81,7 +81,7 @@ it('masks the recipient name after the account lookup', function () {
 
     Livewire::actingAs($sender);
 
-    $component = Livewire::test('transfers.⚡internal-transfer')
+    $component = Livewire::test('transfers.internal-transfer')
         ->set('accountNumber', $recipient->primaryAccount->account_number);
 
     expect($component->get('recipientFound'))->toBeTrue();
@@ -95,7 +95,7 @@ it('rejects a wrong PIN with an error on the pin field', function () {
 
     Livewire::actingAs($sender);
 
-    Livewire::test('transfers.⚡internal-transfer')
+    Livewire::test('transfers.internal-transfer')
         ->set('accountNumber', $recipient->primaryAccount->account_number)
         ->set('amount', '100')
         ->set('pin', '9999')
@@ -109,7 +109,7 @@ it('throttles account lookups after 10 attempts per minute', function () {
 
     Livewire::actingAs($sender);
 
-    $component = Livewire::test('transfers.⚡internal-transfer');
+    $component = Livewire::test('transfers.internal-transfer');
 
     $accountNumber = $recipient->primaryAccount->account_number;
 
@@ -126,7 +126,7 @@ it('rejects a transfer above the available balance with an error on amount', fun
 
     Livewire::actingAs($sender);
 
-    Livewire::test('transfers.⚡internal-transfer')
+    Livewire::test('transfers.internal-transfer')
         ->set('accountNumber', $recipient->primaryAccount->account_number)
         ->set('amount', '100')
         ->set('pin', '1234')

@@ -12,13 +12,13 @@ use Livewire\Volt\Volt;
 | Withdrawal form component
 |--------------------------------------------------------------------------
 |
-| Name resolution: same situation as the other ⚡ single-file components —
+| Name resolution: same situation as the other  single-file components —
 | Volt::mount(...) below restores the `volt-livewire` view namespace that
 | the app's deleted VoltServiceProvider used to register, and the
-| component is referenced by its ⚡-prefixed name
-| (`withdrawals.⚡withdrawal-form`). Note that the app's own view
+| component is referenced by its -prefixed name
+| (`withdrawals.withdrawal-form`). Note that the app's own view
 | (user/withdrawals/create.blade.php) references
-| `<livewire:withdrawals.withdrawal-form />` WITHOUT the ⚡ prefix, which
+| `<livewire:withdrawals.withdrawal-form />` WITHOUT the  prefix, which
 | cannot resolve the template file.
 */
 
@@ -60,7 +60,7 @@ it('rejects a submission without a PIN', function () {
 
     Livewire::actingAs($user);
 
-    Livewire::test('withdrawals.⚡withdrawal-form')
+    Livewire::test('withdrawals.withdrawal-form')
         ->set(validWithdrawalFields())
         ->call('submit')
         ->assertHasErrors('pin');
@@ -73,7 +73,7 @@ it('creates a pending withdrawal request and holds the funds', function () {
 
     Livewire::actingAs($user);
 
-    Livewire::test('withdrawals.⚡withdrawal-form')
+    Livewire::test('withdrawals.withdrawal-form')
         ->set(validWithdrawalFields())
         ->set('pin', '1234')
         ->call('submit')
@@ -97,7 +97,7 @@ it('rejects a wrong PIN with an error on the pin field', function () {
 
     Livewire::actingAs($user);
 
-    Livewire::test('withdrawals.⚡withdrawal-form')
+    Livewire::test('withdrawals.withdrawal-form')
         ->set(validWithdrawalFields())
         ->set('pin', '9999')
         ->call('submit')

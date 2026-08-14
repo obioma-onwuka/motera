@@ -128,7 +128,7 @@
                 <a href="{{ route('transactions.index') }}" class="text-xs font-black text-brand-primary bg-blue-50 px-4 py-2 rounded-full hover:bg-brand-primary hover:text-white transition-all">View All</a>
             </div>
             
-            <livewire:transactions.⚡transaction-history :limit="5" />
+            <livewire:transactions.transaction-history :limit="5" />
         </div>
     </div>
 </x-customer-layout>

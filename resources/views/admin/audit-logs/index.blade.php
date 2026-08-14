@@ -5,6 +5,6 @@
     </x-slot>
 
     <div class="space-y-6">
-        <livewire:admin.⚡audit-logs />
+        <livewire:admin.audit-logs />
     </div>
 </x-admin-layout>

@@ -17,13 +17,14 @@ use Spatie\Permission\Models\Role;
 | check `Gate::authorize(...)` does throw AuthorizationException.)
 |
 | Name resolution note: the components are Livewire 4 single-file
-| components (⚡*.blade.php) whose classes still extend
+| components (*.blade.php) whose classes still extend
 | Livewire\Volt\Component. Volt's render() resolves the template through
-| the `volt-livewire` view namespace, which the app's deleted
-| VoltServiceProvider used to register via Volt::mount(...). The mount
-| call below restores that registration for the test environment and the
-| components must be referenced by their ⚡-prefixed names so the
-| template file can be found.
+| the `volt-livewire` view namespace, which App\Providers\VoltServiceProvider
+| registers via Volt::mount([... resource_path('views/components') ...]) in
+| its boot(). The mount call below registers the same paths for the test
+| environment. Component names must match the view file names exactly —
+| the ⚡ emoji prefix is NOT used in tags or test names (Livewire's tag
+| compiler regex only accepts \w, "-", ":" and "." characters).
 */
 
 beforeEach(function () {
@@ -33,25 +34,40 @@ beforeEach(function () {
 
 dataset('adminComponents', [
     'admin.metrics' => [
-        'admin.⚡metrics', 'view-metrics', 'Operations Admin',
+        'admin.metrics', 'view-metrics', 'Operations Admin',
     ],
     'admin.audit-logs' => [
-        'admin.⚡audit-logs', 'view-audit-logs', 'Compliance Admin',
+        'admin.audit-logs', 'view-audit-logs', 'Compliance Admin',
     ],
     'admin.financials.deposit-review-list' => [
-        'admin.financials.⚡deposit-review-list', 'approve-deposits', 'Operations Admin',
+        'admin.financials.deposit-review-list', 'approve-deposits', 'Operations Admin',
     ],
     'admin.financials.withdrawal-review-list' => [
-        'admin.financials.⚡withdrawal-review-list', 'approve-withdrawals', 'Operations Admin',
+        'admin.financials.withdrawal-review-list', 'approve-withdrawals', 'Operations Admin',
     ],
     'admin.compliance.kyc-review-list' => [
-        'admin.compliance.⚡kyc-review-list', 'review-kyc', 'Compliance Admin',
+        'admin.compliance.kyc-review-list', 'review-kyc', 'Compliance Admin',
     ],
     'admin.biller-management' => [
-        'admin.⚡biller-management', 'manage-billers', 'Operations Admin',
+        'admin.biller-management', 'manage-billers', 'Operations Admin',
     ],
     'admin.customer-list' => [
-        'admin.⚡customer-list', 'view-customers', 'Support Admin',
+        'admin.customer-list', 'view-customers', 'Support Admin',
+    ],
+    'admin.volume-chart' => [
+        'admin.volume-chart', 'view-metrics', 'Operations Admin',
+    ],
+    'admin.deposit-withdrawal-chart' => [
+        'admin.deposit-withdrawal-chart', 'view-metrics', 'Operations Admin',
+    ],
+    'admin.tier-donut' => [
+        'admin.tier-donut', 'view-metrics', 'Operations Admin',
+    ],
+    'admin.user-growth-chart' => [
+        'admin.user-growth-chart', 'view-metrics', 'Operations Admin',
+    ],
+    'admin.recent-transactions' => [
+        'admin.recent-transactions', 'view-metrics', 'Operations Admin',
     ],
 ]);
 
