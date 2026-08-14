@@ -5,6 +5,6 @@
     </x-slot>
 
     <div class="space-y-6">
-        <livewire:admin.compliance.⚡kyc-review-list />
+        <livewire:admin.compliance.kyc-review-list />
     </div>
 </x-admin-layout>

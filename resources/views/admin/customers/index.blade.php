@@ -5,6 +5,6 @@
     </x-slot>
 
     <div class="space-y-6">
-        <livewire:admin.⚡customer-list />
+        <livewire:admin.customer-list />
     </div>
 </x-admin-layout>

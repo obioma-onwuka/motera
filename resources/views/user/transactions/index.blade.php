@@ -4,6 +4,6 @@
     </x-slot>
 
     <div class="space-y-6">
-        <livewire:transactions.⚡transaction-history />
+        <livewire:transactions.transaction-history />
     </div>
 </x-customer-layout>

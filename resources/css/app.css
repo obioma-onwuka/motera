@@ -23,6 +23,10 @@
     --color-brand-info: #0EA5E9;
 }
 
+[x-cloak] {
+    display: none !important;
+}
+
 @layer components {
     .btn-primary {
         @apply bg-brand-primary text-white hover:bg-blue-800 focus:ring-4 focus:ring-blue-200 rounded-xl px-5 py-3 font-semibold transition-all duration-200 inline-flex items-center justify-center;

@@ -5,7 +5,7 @@
     </x-slot>
 
     <div class="py-2">
-        <livewire:settings.⚡profile-settings />
-        <livewire:settings.⚡security-settings />
+        <livewire:settings.profile-settings />
+        <livewire:settings.security-settings />
     </div>
 </x-customer-layout>

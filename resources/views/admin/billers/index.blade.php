@@ -5,6 +5,6 @@
     </x-slot>
 
     <div class="space-y-6">
-        <livewire:admin.⚡biller-management />
+        <livewire:admin.biller-management />
     </div>
 </x-admin-layout>
