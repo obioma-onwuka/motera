@@ -260,3 +260,12 @@ If you find this project useful:
 
 **Build banking systems the right way.**
 
+<img width="1920" height="975" alt="motera" src="https://github.com/user-attachments/assets/b7f02dd5-32f6-4d12-bf90-9c3dfb16c659" />
+
+<img width="1920" height="975" alt="admin dashboard" src="https://github.com/user-attachments/assets/949e2b22-df5a-414c-8a30-94890873f9df" />
+
+<img width="1920" height="975" alt="login" src="https://github.com/user-attachments/assets/3cdcfc10-dd47-41a7-a278-0a295d93b14f" />
+
+
+
+
