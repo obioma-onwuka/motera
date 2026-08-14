@@ -72,7 +72,7 @@ new class extends Component {
     }
 }; ?>
 
-<x-admin.chart-card
+<x-chart-card
     title="Deposits vs Withdrawals"
     subtitle="Last 8 weeks, successful transactions"
     canvas-id="admin-deposit-withdrawal-chart"

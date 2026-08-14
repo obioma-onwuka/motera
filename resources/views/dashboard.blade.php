@@ -121,6 +121,17 @@
             </a>
         </div>
 
+        <!-- Key Metrics -->
+        <livewire:dashboard.stats-row />
+
+        <!-- Insights -->
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div class="xl:col-span-2">
+                <livewire:dashboard.cashflow-chart />
+            </div>
+            <livewire:dashboard.tier-progress />
+        </div>
+
         <!-- Recent Activity Module -->
         <div class="bg-white rounded-[2rem] p-8 border border-brand-border shadow-sm">
             <div class="flex items-center justify-between mb-8">

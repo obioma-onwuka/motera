@@ -68,7 +68,7 @@ new class extends Component {
     }
 }; ?>
 
-<x-admin.chart-card
+<x-chart-card
     title="Platform Transaction Volume"
     subtitle="Last 30 days"
     canvas-id="admin-volume-chart"
