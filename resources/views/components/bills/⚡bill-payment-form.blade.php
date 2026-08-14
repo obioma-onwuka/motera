@@ -1,13 +1,16 @@
 <?php
 
 use Livewire\Volt\Component;
+use Livewire\Attributes\Computed;
+use App\Actions\Bills\PayBillAction;
 use App\Models\Biller;
-use App\Models\BillPayment;
-use App\Models\BankAccount;
-use App\Models\Transaction;
-use App\Models\LedgerEntry;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use App\Exceptions\AccountRestrictedException;
+use App\Exceptions\IdempotencyViolationException;
+use App\Exceptions\InsufficientFundsException;
+use App\Exceptions\InvalidPinException;
+use App\Exceptions\TooManyPinAttemptsException;
 use App\Traits\InteractsWithIdempotency;
 
 new class extends Component {
@@ -32,82 +35,45 @@ new class extends Component {
         $this->step = 2;
     }
 
-    public function processPayment()
+    #[Computed]
+    public function selectedBiller()
+    {
+        return $this->selectedBillerId ? Biller::find($this->selectedBillerId) : null;
+    }
+
+    public function processPayment(PayBillAction $action)
     {
         $this->validate([
-            'amount' => 'required|numeric|min:100',
+            'amount' => 'required|numeric|min:' . config('motera.limits.min_transfer'),
             'customerIdentifier' => 'required|string',
             'pin' => 'required|string|size:4',
         ]);
 
-        return $this->idempotent($this->idempotencyKey, function () {
-            $user = auth()->user();
-            $biller = Biller::findOrFail($this->selectedBillerId);
+        try {
+            return $this->idempotent($this->idempotencyKey, function () use ($action) {
+                $user = auth()->user();
 
-            return DB::transaction(function () use ($user, $biller) {
-                $account = BankAccount::where('id', $user->primaryAccount->id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($account->available_balance < $this->amount) {
-                    $this->addError('amount', 'Insufficient balance.');
-                    return;
-                }
-
-                if (!\Illuminate\Support\Facades\Hash::check($this->pin, $user->transaction_pin)) {
-                    $this->addError('pin', 'Incorrect Transaction PIN.');
-                    return;
-                }
-
-                $reference = 'BILL-' . strtoupper(Str::random(10));
-
-                // 1. Create High-Level Transaction
-                $transaction = Transaction::create([
-                    'user_id' => $user->id,
-                    'bank_account_id' => $account->id,
-                    'type' => 'bill_payment',
-                    'amount' => $this->amount,
-                    'status' => 'successful',
-                    'reference' => $reference,
-                    'description' => "Bill Payment: {$biller->name} ({$this->customerIdentifier})",
-                    'metadata' => [
-                        'biller_id' => $biller->id,
-                        'customer_identifier' => $this->customerIdentifier,
-                        'idempotency_key' => $this->idempotencyKey,
-                    ],
-                ]);
-
-                // 2. Deduct balances
-                $account->decrement('available_balance', $this->amount);
-                $account->decrement('ledger_balance', $this->amount);
-
-                // 3. Record Bill Payment record
-                BillPayment::create([
-                    'user_id' => $user->id,
-                    'bank_account_id' => $account->id,
-                    'biller_id' => $biller->id,
-                    'amount' => $this->amount,
-                    'reference' => $reference,
+                $action->execute($user, [
+                    'biller_id' => $this->selectedBillerId,
+                    'amount' => (string) $this->amount,
                     'customer_identifier' => $this->customerIdentifier,
-                    'status' => 'successful',
-                    'metadata' => ['idempotency_key' => $this->idempotencyKey],
-                ]);
-
-                // 4. Ledger Entry
-                LedgerEntry::create([
-                    'transaction_id' => $transaction->id,
-                    'bank_account_id' => $account->id,
-                    'type' => 'debit',
-                    'amount' => $this->amount,
-                    'description' => "Bill Payment: {$biller->name} ({$this->customerIdentifier})",
-                    'reference' => $reference,
-                    'balance_after' => $account->available_balance,
+                    'pin' => $this->pin,
                 ]);
 
                 session()->flash('success', 'Payment successful!');
                 return redirect()->route('dashboard');
             });
-        });
+        } catch (InvalidPinException | TooManyPinAttemptsException $e) {
+            $this->addError('pin', $e->getMessage());
+        } catch (InsufficientFundsException $e) {
+            $this->addError('amount', $e->getMessage());
+        } catch (AccountRestrictedException $e) {
+            $this->addError('amount', $e->getMessage());
+        } catch (IdempotencyViolationException $e) {
+            session()->flash('info', 'This payment was already submitted.');
+        } catch (ThrottleRequestsException $e) {
+            $this->addError('amount', $e->getMessage());
+        }
     }
 
     public function with()
@@ -151,33 +117,33 @@ new class extends Component {
 
                 <div class="bg-slate-50 rounded-2xl p-6 mb-6 border border-brand-border flex items-center gap-4">
                     <div class="h-12 w-12 bg-white rounded-xl flex items-center justify-center shadow-sm border border-brand-border flex-shrink-0">
-                        <span class="text-brand-primary font-bold text-lg cursor-default">{{ substr(\App\Models\Biller::find($selectedBillerId)->name ?? 'B', 0, 1) }}</span>
+                        <span class="text-brand-primary font-bold text-lg cursor-default">{{ substr($this->selectedBiller?->name ?? 'B', 0, 1) }}</span>
                     </div>
                     <div>
                         <p class="text-[10px] uppercase font-bold text-brand-text-secondary tracking-widest">Selected Biller</p>
-                        <p class="font-bold text-brand-text-primary">{{ \App\Models\Biller::find($selectedBillerId)->name ?? 'Service' }}</p>
+                        <p class="font-bold text-brand-text-primary">{{ $this->selectedBiller?->name ?? 'Service' }}</p>
                     </div>
                 </div>
 
                 <form wire:submit="processPayment" class="space-y-5">
                     <div>
-                        <label class="block text-sm font-semibold text-brand-text-primary mb-2">Customer Identifier</label>
-                        <input type="text" wire:model="customerIdentifier" class="block w-full px-4 py-4 rounded-2xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-sm transition-all" placeholder="Phone, Meter, or Decoder Number">
+                        <label for="customerIdentifier" class="block text-sm font-semibold text-brand-text-primary mb-2">Customer Identifier</label>
+                        <input type="text" id="customerIdentifier" wire:model="customerIdentifier" class="block w-full px-4 py-4 rounded-2xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-sm transition-all" placeholder="Phone, Meter, or Decoder Number">
                         @error('customerIdentifier') <span class="text-xs text-brand-danger mt-1">{{ $message }}</span> @enderror
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-brand-text-primary mb-2">Amount (₦)</label>
+                        <label for="amount" class="block text-sm font-semibold text-brand-text-primary mb-2">Amount ($)</label>
                         <div class="relative">
-                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-brand-text-secondary font-bold">₦</div>
-                            <input type="number" wire:model="amount" class="block w-full pl-10 pr-4 py-4 rounded-2xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-sm transition-all" placeholder="0.00">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-brand-text-secondary font-bold">$</div>
+                            <input type="number" id="amount" wire:model="amount" class="block w-full pl-10 pr-4 py-4 rounded-2xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-sm transition-all" placeholder="0.00">
                         </div>
                         @error('amount') <span class="text-xs text-brand-danger mt-1">{{ $message }}</span> @enderror
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-brand-text-primary mb-2">Transaction PIN</label>
-                        <input type="password" wire:model="pin" maxlength="4" class="block w-full px-4 py-4 rounded-2xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-center tracking-[1em] text-lg transition-all" placeholder="••••">
+                        <label for="pin" class="block text-sm font-semibold text-brand-text-primary mb-2">Transaction PIN</label>
+                        <input type="password" id="pin" wire:model="pin" maxlength="4" class="block w-full px-4 py-4 rounded-2xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-center tracking-[1em] text-lg transition-all" placeholder="••••">
                         @error('pin') <span class="text-xs text-brand-danger mt-1">{{ $message }}</span> @enderror
                     </div>
 

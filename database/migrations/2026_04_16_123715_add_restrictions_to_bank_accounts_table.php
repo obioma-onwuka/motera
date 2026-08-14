@@ -23,7 +23,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('bank_accounts', function (Blueprint $table) {
-            //
+            $table->dropColumn(['is_restricted', 'restriction_reason']);
         });
     }
 };

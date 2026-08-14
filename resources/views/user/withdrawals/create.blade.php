@@ -9,6 +9,6 @@
     </x-slot>
 
     <div class="max-w-lg mx-auto">
-        <livewire:withdrawals.withdrawal-form />
+        <livewire:withdrawals.⚡withdrawal-form />
     </div>
 </x-customer-layout>

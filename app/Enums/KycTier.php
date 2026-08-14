@@ -2,9 +2,9 @@
 
 namespace App\Enums;
 
-enum KycTier: int
+enum KycTier: string
 {
-    case TIER_1 = 1;
-    case TIER_2 = 2;
-    case TIER_3 = 3;
+    case TIER_1 = 'tier_1';
+    case TIER_2 = 'tier_2';
+    case TIER_3 = 'tier_3';
 }

@@ -17,10 +17,10 @@ class ContentSecurityPolicy
     {
         $response = $next($request);
 
-        $viteHosts = app()->environment('local') ? " http://localhost:5173 https://localhost:5173 http://motera.test:5173 https://motera.test:5173 http://127.0.0.1:5173 https://127.0.0.1:5173 wss://motera.test:5173 ws://motera.test:5173" : "";
+        $viteHosts = app()->environment('local') ? ' http://localhost:5173 https://localhost:5173 http://motera.test:5173 https://motera.test:5173 http://127.0.0.1:5173 https://127.0.0.1:5173 wss://motera.test:5173 ws://motera.test:5173' : '';
 
         $csp = "default-src 'self'; ";
-        $csp .= "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net{$viteHosts}; "; // Livewire/Alpine + Chartjs
+        $csp .= "script-src 'self' 'unsafe-inline' 'unsafe-eval'{$viteHosts}; "; // Livewire/Alpine; Chart.js is bundled via Vite
         $csp .= "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.bunny.net{$viteHosts}; ";
         $csp .= "font-src 'self' https://fonts.gstatic.com https://fonts.bunny.net{$viteHosts}; ";
         $csp .= "img-src 'self' data: https:; ";

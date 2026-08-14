@@ -1,7 +1,7 @@
 import './bootstrap';
 
-import Alpine from 'alpinejs';
+// Note: Alpine is bundled by Livewire 4 — do NOT import/start it here
+// (a second instance breaks both).
+import Chart from 'chart.js/auto';
 
-window.Alpine = Alpine;
-
-Alpine.start();
+window.Chart = Chart;

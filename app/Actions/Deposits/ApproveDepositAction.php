@@ -3,11 +3,16 @@
 namespace App\Actions\Deposits;
 
 use App\Actions\BaseAction;
+use App\Enums\RequestStatus;
+use App\Enums\TransactionStatus;
+use App\Exceptions\RequestAlreadyProcessedException;
+use App\Models\BankAccount;
 use App\Models\DepositRequest;
 use App\Models\Transaction;
-use App\Models\LedgerEntry;
+use App\Services\LedgerService;
+use App\Services\ReferenceGenerator;
 use Illuminate\Support\Facades\DB;
-use App\Enums\TransactionStatus;
+use Illuminate\Support\Facades\Gate;
 
 class ApproveDepositAction extends BaseAction
 {
@@ -16,44 +21,49 @@ class ApproveDepositAction extends BaseAction
      */
     public function execute(mixed ...$args): DepositRequest
     {
+        Gate::authorize('approve-deposits');
+
         /** @var DepositRequest $deposit */
         $deposit = $args[0];
         $adminNote = $args[1] ?? 'Deposit verified and approved.';
 
         return DB::transaction(function () use ($deposit, $adminNote) {
-            $deposit->update([
-                'status' => 'approved',
-                'admin_note' => $adminNote,
-            ]);
+            // Re-fetch and lock the request row to prevent double-processing.
+            $deposit = DepositRequest::whereKey($deposit->id)->lockForUpdate()->firstOrFail();
 
-            $account = $deposit->bankAccount;
-            $account->lockForUpdate()->increment('ledger_balance', $deposit->amount);
-            $account->increment('available_balance', $deposit->amount);
+            if ($deposit->status !== RequestStatus::PENDING) {
+                throw new RequestAlreadyProcessedException('This deposit request has already been processed.');
+            }
 
-            // 1. Create High-Level Transaction Record
+            $account = BankAccount::whereKey($deposit->bank_account_id)->lockForUpdate()->firstOrFail();
+
             $transaction = Transaction::create([
                 'user_id' => $deposit->user_id,
                 'bank_account_id' => $account->id,
+                'reference' => ReferenceGenerator::generate('DEP', fn ($r) => Transaction::where('reference', $r)->exists()),
                 'type' => 'deposit',
                 'amount' => $deposit->amount,
-                'reference' => $deposit->reference,
                 'status' => TransactionStatus::SUCCESSFUL,
-                'description' => 'Wallet Funding via Manual Deposit',
+                'description' => 'Deposit approval',
                 'metadata' => [
-                    'deposit_request_id' => $deposit->id,
+                    'deposit_reference' => $deposit->reference,
                 ],
             ]);
 
-            // 2. Double-entry: One entry for the user account (the other is system/off-ledger)
-            LedgerEntry::create([
-                'transaction_id' => $transaction->id,
-                'bank_account_id' => $account->id,
-                'type' => 'credit',
-                'amount' => $deposit->amount,
-                'reference' => $deposit->reference,
-                'balance_after' => $account->available_balance,
-                'description' => 'Manual Deposit Credit',
+            $ledger = app(LedgerService::class);
+            $ledger->credit($transaction, $account, (string) $deposit->amount, 'Deposit '.$deposit->reference);
+            $ledger->contra($transaction, 'debit', (string) $deposit->amount, 'Deposit '.$deposit->reference.' (system contra)');
+
+            $deposit->update([
+                'status' => RequestStatus::APPROVED,
+                'admin_note' => $adminNote,
             ]);
+
+            activity()
+                ->causedBy(auth()->user())
+                ->performedOn($deposit)
+                ->withProperties(['amount' => $deposit->amount])
+                ->log('deposit.approved');
 
             return $deposit;
         });

@@ -1,10 +1,14 @@
 <?php
 
 use Livewire\Volt\Component;
-use App\Models\CardRequest;
-use App\Models\BankAccount;
-use Illuminate\Support\Facades\DB;
+use App\Actions\Cards\RequestCardAction;
 use Illuminate\Support\Str;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use App\Exceptions\AccountRestrictedException;
+use App\Exceptions\IdempotencyViolationException;
+use App\Exceptions\InsufficientFundsException;
+use App\Exceptions\InvalidPinException;
+use App\Exceptions\TooManyPinAttemptsException;
 use App\Traits\InteractsWithIdempotency;
 
 new class extends Component {
@@ -13,6 +17,7 @@ new class extends Component {
     public $type = 'virtual';
     public $cardName;
     public $deliveryAddress;
+    public $pin;
     public $showRequestForm = false;
     public $idempotencyKey;
 
@@ -22,81 +27,48 @@ new class extends Component {
         $this->idempotencyKey = Str::uuid()->toString();
     }
 
-    public function submitRequest()
+    public function submitRequest(RequestCardAction $action)
     {
         $this->validate([
             'type' => 'required|in:virtual,physical',
             'cardName' => 'required|string|max:26',
             'deliveryAddress' => 'required_if:type,physical|nullable|string',
+            'pin' => $this->type === 'physical' ? 'required|digits:4' : 'nullable',
         ]);
 
-        return $this->idempotent($this->idempotencyKey, function () {
-            $user = auth()->user();
-            $fee = $this->type === 'physical' ? 1000 : 0;
+        try {
+            $this->idempotent($this->idempotencyKey, function () use ($action) {
+                $user = auth()->user();
 
-            return DB::transaction(function () use ($user, $fee) {
-                $account = BankAccount::where('id', $user->primaryAccount->id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($account->available_balance < $fee) {
-                    $this->addError('type', 'Insufficient balance for card issuance fee.');
-                    return;
-                }
-
-                if ($fee > 0) {
-                    $account->decrement('available_balance', $fee);
-                    $account->decrement('ledger_balance', $fee);
-
-                    $reference = 'CARD-FEE-' . strtoupper(Str::random(8));
-                    
-                    $transaction = \App\Models\Transaction::create([
-                        'user_id' => $user->id,
-                        'bank_account_id' => $account->id,
-                        'type' => 'card_fee',
-                        'amount' => $fee,
-                        'status' => 'successful',
-                        'reference' => $reference,
-                        'description' => "Card Issuance Fee ({$this->type})",
-                        'metadata' => [
-                            'idempotency_key' => $this->idempotencyKey,
-                        ],
-                    ]);
-                    
-                    \App\Models\LedgerEntry::create([
-                        'transaction_id' => $transaction->id,
-                        'bank_account_id' => $account->id,
-                        'type' => 'debit',
-                        'amount' => $fee,
-                        'description' => "Card Issuance Fee ({$this->type})",
-                        'reference' => $reference,
-                        'balance_after' => $account->available_balance,
-                    ]);
-                }
-
-                CardRequest::create([
-                    'user_id' => $user->id,
-                    'bank_account_id' => $account->id,
+                $action->execute($user, [
                     'type' => $this->type,
                     'card_name' => $this->cardName,
                     'delivery_address' => $this->deliveryAddress,
-                    'fee' => $fee,
-                    'status' => 'pending',
-                    'metadata' => ['idempotency_key' => $this->idempotencyKey],
+                    'pin' => $this->pin,
                 ]);
-            });
 
-            session()->flash('success', 'Card request submitted successfully!');
-            $this->showRequestForm = false;
-            $this->reset(['type', 'deliveryAddress']);
-            $this->idempotencyKey = Str::uuid()->toString();
-        });
+                session()->flash('success', 'Card request submitted successfully!');
+                $this->showRequestForm = false;
+                $this->reset(['type', 'deliveryAddress', 'pin']);
+                $this->idempotencyKey = Str::uuid()->toString();
+            });
+        } catch (InvalidPinException | TooManyPinAttemptsException $e) {
+            $this->addError('pin', $e->getMessage());
+        } catch (InsufficientFundsException $e) {
+            $this->addError('amount', $e->getMessage());
+        } catch (AccountRestrictedException $e) {
+            $this->addError('amount', $e->getMessage());
+        } catch (IdempotencyViolationException $e) {
+            session()->flash('info', 'This request was already submitted.');
+        } catch (ThrottleRequestsException $e) {
+            $this->addError('amount', $e->getMessage());
+        }
     }
 
     public function with()
     {
         return [
-            'requests' => auth()->user()->cardRequests()->latest()->get(),
+            'requests' => auth()->user()->cardRequests()->latest()->paginate(10),
         ];
     }
 }; ?>
@@ -118,26 +90,34 @@ new class extends Component {
                         <span class="block font-bold text-brand-text-primary">Virtual Card</span>
                         <span class="text-xs text-brand-text-secondary">Free & Instant</span>
                     </button>
-                    <button type="button" wire:click="$set('type', 'physical')" 
+                    <button type="button" wire:click="$set('type', 'physical')"
                             class="p-4 border-2 @if($type === 'physical') border-brand-primary bg-blue-50 @else border-brand-border bg-white @endif rounded-2xl text-center transition-all cursor-pointer">
                         <span class="block font-bold text-brand-text-primary">Physical Card</span>
-                        <span class="text-xs text-brand-text-secondary">₦1,000.00 Fee</span>
+                        <span class="text-xs text-brand-text-secondary">${{ number_format(config('motera.limits.card_physical_fee'), 2) }} Fee</span>
                     </button>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-semibold text-brand-text-primary mb-2">Name on Card</label>
-                    <input type="text" wire:model.blur="cardName" class="block w-full px-4 py-3 rounded-xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-sm transition-all shadow-sm uppercase tracking-wider">
+                    <label for="cardName" class="block text-sm font-semibold text-brand-text-primary mb-2">Name on Card</label>
+                    <input type="text" id="cardName" wire:model.blur="cardName" class="block w-full px-4 py-3 rounded-xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-sm transition-all shadow-sm uppercase tracking-wider">
                     @error('cardName') <span class="text-xs text-brand-danger mt-1">{{ $message }}</span> @enderror
                 </div>
 
                 @if ($type === 'physical')
                     <div>
-                        <label class="block text-sm font-semibold text-brand-text-primary mb-2">Delivery Address</label>
-                        <textarea wire:model.blur="deliveryAddress" rows="3" class="block w-full px-4 py-3 rounded-xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-sm transition-all shadow-sm"></textarea>
+                        <label for="deliveryAddress" class="block text-sm font-semibold text-brand-text-primary mb-2">Delivery Address</label>
+                        <textarea id="deliveryAddress" wire:model.blur="deliveryAddress" rows="3" class="block w-full px-4 py-3 rounded-xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-sm transition-all shadow-sm"></textarea>
                         @error('deliveryAddress') <span class="text-xs text-brand-danger mt-1">{{ $message }}</span> @enderror
                     </div>
+
+                    <div>
+                        <label for="pin" class="block text-sm font-semibold text-brand-text-primary mb-2">Transaction PIN</label>
+                        <input type="password" id="pin" wire:model="pin" maxlength="4" class="block w-full px-4 py-3 rounded-xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-center tracking-[1em] text-lg transition-all shadow-sm" placeholder="••••">
+                        @error('pin') <span class="text-xs text-brand-danger mt-1">{{ $message }}</span> @enderror
+                    </div>
                 @endif
+
+                @error('amount') <span class="text-xs text-brand-danger mt-1">{{ $message }}</span> @enderror
 
                 <div class="flex justify-end gap-3 pt-4 border-t border-brand-border">
                     <button type="button" wire:click="$set('showRequestForm', false)" class="btn-outline text-sm py-2 px-4 min-h-0">Cancel</button>
@@ -152,7 +132,7 @@ new class extends Component {
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         @forelse ($requests as $request)
-            <div class="bg-gradient-to-br from-gray-900 to-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 relative overflow-hidden group">
+            <div wire:key="card-request-{{ $request->id }}" class="bg-gradient-to-br from-gray-900 to-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 relative overflow-hidden group">
                 <div class="absolute top-0 right-0 p-4">
                     <span class="px-2 py-1 text-[10px] uppercase font-bold rounded {{ $request->status === 'pending' ? 'bg-yellow-500 text-white' : 'bg-green-500 text-white' }}">
                         {{ $request->status }}
@@ -186,5 +166,9 @@ new class extends Component {
                 <p class="text-gray-500">You don't have any cards yet.</p>
             </div>
         @endforelse
+    </div>
+
+    <div class="mt-6">
+        {{ $requests->links() }}
     </div>
 </div>

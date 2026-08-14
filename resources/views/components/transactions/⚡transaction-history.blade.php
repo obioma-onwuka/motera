@@ -23,25 +23,36 @@ new class extends Component
             return ['entries' => collect(), 'chartData' => []];
         }
 
-        // --- Chart Data Aggregation ---
-        $chartEntries = (clone $query)->where('created_at', '>=', now()->subDays(7))->get();
-        $dates = collect(range(6, 0))->map(fn($days) => now()->subDays($days)->format('M d'));
-        
-        $credits = [];
-        $debits = [];
-        
-        foreach ($dates as $date) {
-            $dayEntries = $chartEntries->filter(fn($e) => $e->created_at->format('M d') === $date);
-            $credits[] = $dayEntries->where('type', 'credit')->sum('amount');
-            $debits[] = $dayEntries->where('type', 'debit')->sum('amount');
-        }
+        if ($this->limit) {
+            // Dashboard embeds this component with a limit; skip the chart query entirely.
+            $chartData = ['labels' => [], 'credits' => [], 'debits' => []];
+        } else {
+            // --- Chart Data Aggregation (SQL-side) ---
+            $chartRows = (clone $query)
+                ->without('transaction')
+                ->where('created_at', '>=', now()->subDays(6)->startOfDay())
+                ->selectRaw('date(created_at) as day, type, sum(amount) as total')
+                ->groupBy('day', 'type')
+                ->get();
 
-        $chartData = [
-            'labels' => $dates->toArray(),
-            'credits' => $credits,
-            'debits' => $debits,
-        ];
-        // ------------------------------
+            $dates = collect(range(6, 0))->map(fn ($days) => now()->subDays($days)->format('M d'));
+
+            $credits = [];
+            $debits = [];
+
+            foreach (range(6, 0) as $days) {
+                $dayKey = now()->subDays($days)->format('Y-m-d');
+                $credits[] = (float) ($chartRows->firstWhere(fn ($row) => $row->day === $dayKey && $row->type === 'credit')?->total ?? 0);
+                $debits[] = (float) ($chartRows->firstWhere(fn ($row) => $row->day === $dayKey && $row->type === 'debit')?->total ?? 0);
+            }
+
+            $chartData = [
+                'labels' => $dates->toArray(),
+                'credits' => $credits,
+                'debits' => $debits,
+            ];
+            // ------------------------------
+        }
 
         if ($this->type) {
             $query->where('type', $this->type);
@@ -66,33 +77,39 @@ new class extends Component
 
     public function export()
     {
-        $entries = Auth::user()->primaryAccount->ledgerEntries()->latest()->get();
-        $filename = "statement_" . now()->format('Y-m-d_H-i-s') . ".csv";
-        $headers = [
-            'Content-type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=$filename",
-            'Pragma' => 'no-cache',
-            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
-            'Expires' => '0',
-        ];
+        $account = Auth::user()->primaryAccount;
 
-        $callback = function() use ($entries) {
-            $file = fopen('php://output', 'w');
-            fputcsv($file, ['Date', 'Description', 'Reference', 'Type', 'Amount']);
+        if (! $account) {
+            session()->flash('error', 'You need a primary bank account to export transactions.');
+            return $this->redirect(request()->header('Referer') ?: '/dashboard');
+        }
 
-            foreach ($entries as $entry) {
-                fputcsv($file, [
+        $query = $account->ledgerEntries()->latest();
+
+        if ($this->type) {
+            $query->where('type', $this->type);
+        }
+
+        if ($this->search) {
+            $query->where('description', 'like', '%' . $this->search . '%');
+        }
+
+        return response()->streamDownload(function () use ($query) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Date', 'Description', 'Reference', 'Type', 'Amount']);
+
+            $query->cursor()->each(function ($entry) use ($out) {
+                fputcsv($out, [
                     $entry->created_at->format('Y-m-d H:i:s'),
                     $entry->description,
                     $entry->reference,
                     strtoupper($entry->type),
                     $entry->amount,
                 ]);
-            }
-            fclose($file);
-        };
+            });
 
-        return response()->stream($callback, 200, $headers);
+            fclose($out);
+        }, 'transactions.csv', ['Content-Type' => 'text/csv']);
     }
 };
 ?>
@@ -104,12 +121,7 @@ new class extends Component
          x-data="{
             chartData: @js($chartData),
             init() {
-                if(!window.Chart) {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-                    script.onload = () => this.renderChart();
-                    document.head.appendChild(script);
-                } else {
+                if (window.Chart) {
                     this.renderChart();
                 }
             },
@@ -195,7 +207,7 @@ new class extends Component
                     </div>
                     <div class="text-right">
                         <p class="font-bold text-lg {{ $entry->type === 'credit' ? 'text-green-600' : 'text-brand-text-primary' }}">
-                            {{ $entry->type === 'credit' ? '+' : '-' }}₦{{ number_format($entry->amount, 2) }}
+                            {{ $entry->type === 'credit' ? '+' : '-' }}${{ number_format($entry->amount, 2) }}
                         </p>
                         <span class="text-[8px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
                             {{ $entry->transaction->status }}

@@ -3,6 +3,8 @@
 namespace App\Actions\Accounts;
 
 use App\Actions\BaseAction;
+use App\Enums\AccountStatus;
+use App\Enums\KycTier;
 use App\Models\BankAccount;
 use App\Models\User;
 use Illuminate\Support\Str;
@@ -16,14 +18,14 @@ class CreateBankAccountAction extends BaseAction
     {
         /** @var User $user */
         $user = $args[0];
-        $currency = $args[1] ?? 'NGN';
+        $currency = $args[1] ?? 'USD';
 
         return BankAccount::create([
             'user_id' => $user->id,
             'account_number' => $this->generateAccountNumber(),
             'currency' => $currency,
-            'status' => \App\Enums\AccountStatus::ACTIVE,
-            'tier' => \App\Enums\KycTier::TIER_1,
+            'status' => AccountStatus::ACTIVE,
+            'tier' => KycTier::TIER_1,
         ]);
     }
 
@@ -33,7 +35,7 @@ class CreateBankAccountAction extends BaseAction
     protected function generateAccountNumber(): string
     {
         do {
-            $number = '00' . Str::random(8); // Simple simulation
+            $number = '00'.Str::random(8); // Simple simulation
             $number = substr(str_shuffle('0123456789'), 0, 10);
         } while (BankAccount::where('account_number', $number)->exists());
 

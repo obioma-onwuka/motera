@@ -9,6 +9,6 @@
     </x-slot>
 
     <div class="max-w-lg mx-auto">
-        <livewire:deposits.manual-deposit-form />
+        <livewire:deposits.⚡manual-deposit-form />
     </div>
 </x-customer-layout>

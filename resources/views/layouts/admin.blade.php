@@ -38,16 +38,30 @@
                     <h2 class="text-lg font-bold">Admin Console</h2>
                 </div>
                 <div class="flex items-center gap-6">
-                    <div class="flex items-center gap-3">
-                        <div class="text-right">
-                            <p class="text-xs font-bold">{{ auth()->user()->name }}</p>
-                            <p class="text-[10px] text-brand-text-secondary">Super Admin</p>
-                        </div>
-                        <div class="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
-                            {{ substr(auth()->user()->name, 0, 1) }}
+                    <div class="relative group">
+                        <button type="button" class="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-slate-100 focus:outline-none">
+                            <div class="text-right">
+                                <p class="text-xs font-bold">{{ auth()->user()->name }}</p>
+                                <p class="text-[10px] text-brand-text-secondary">Super Admin</p>
+                            </div>
+                            <div class="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
+                                {{ substr(auth()->user()->name, 0, 1) }}
+                            </div>
+                        </button>
+
+                        <div class="absolute right-0 top-full mt-2 hidden min-w-[170px] rounded-xl border border-slate-200 bg-white py-2 shadow-lg group-hover:block">
+                            <a href="{{ route('logout') }}"
+                               onclick="event.preventDefault(); document.getElementById('logout-form').submit();"
+                               class="block px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-100 hover:text-slate-900">
+                                Logout
+                            </a>
                         </div>
                     </div>
                 </div>
+
+                <form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
+                    @csrf
+                </form>
             </header>
 
             <!-- Admin Page Content -->

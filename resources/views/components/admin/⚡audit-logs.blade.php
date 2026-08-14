@@ -10,6 +10,8 @@ new class extends Component
 
     public function with()
     {
+        $this->authorize('view-audit-logs');
+
         return [
             'logs' => Activity::with('causer')->latest()->paginate(20),
         ];

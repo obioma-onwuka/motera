@@ -1,22 +1,29 @@
 <?php
 
-use Livewire\Volt\Component;
+use App\Actions\Transfers\InitiateInternalTransferAction;
+use App\Exceptions\AccountRestrictedException;
+use App\Exceptions\IdempotencyViolationException;
+use App\Exceptions\InsufficientFundsException;
+use App\Exceptions\InvalidPinException;
+use App\Exceptions\TooManyPinAttemptsException;
 use App\Models\BankAccount;
-use App\Models\Transaction;
-use App\Models\LedgerEntry;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use App\Services\NameMasker;
 use App\Traits\InteractsWithIdempotency;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
+use Livewire\Volt\Component;
 
 new class extends Component {
     use InteractsWithIdempotency;
 
     public $accountNumber;
-    public $recipientName;
+    public $recipientName = null;
+    public $recipientFound = false;
     public $amount;
     public $description;
     public $step = 1;
-    public $pin;
+    public $pin = '';
     public $idempotencyKey;
 
     public function mount()
@@ -24,123 +31,91 @@ new class extends Component {
         $this->idempotencyKey = Str::uuid()->toString();
     }
 
-    public function updatedAccountNumber()
+    public function updatedAccountNumber($value)
     {
-        $account = BankAccount::where('account_number', $this->accountNumber)->first();
-        $this->recipientName = $account && $account->user_id !== auth()->id() ? $account->user->name : null;
+        $this->recipientName = null;
+        $this->recipientFound = false;
+
+        if (blank($value)) {
+            return;
+        }
+
+        $account = RateLimiter::attempt('account-lookup:'.auth()->id(), 10, function () use ($value) {
+            return BankAccount::where('account_number', $value)->first();
+        }, 60);
+
+        if ($account === false) {
+            $this->addError('accountNumber', 'Too many lookups. Try again in a minute.');
+
+            return;
+        }
+
+        if ($account instanceof BankAccount && $account->id !== auth()->user()->primaryAccount?->id) {
+            $this->recipientName = NameMasker::mask($account->user->name);
+            $this->recipientFound = true;
+        }
     }
 
     public function confirmTransfer()
     {
         $this->validate([
-            'accountNumber' => 'required|exists:bank_accounts,account_number',
-            'amount' => 'required|numeric|min:100',
+            'accountNumber' => ['required', 'string', function ($attr, $value, $fail) {
+                if (! $this->recipientFound) {
+                    $fail('Recipient account not found.');
+                }
+            }],
+            'amount' => ['required', 'numeric', 'regex:/^\d+(\.\d{1,2})?$/', 'min:'.config('motera.limits.min_transfer')],
             'description' => 'nullable|string|max:100',
         ]);
-
-        $senderAccount = auth()->user()->primaryAccount;
-        if ($senderAccount->available_balance < $this->amount) {
-            $this->addError('amount', 'Insufficient balance.');
-            return;
-        }
 
         $this->step = 2;
     }
 
-    public function processTransfer()
+    public function processTransfer(InitiateInternalTransferAction $action)
     {
-        $this->validate([
+        $validated = $this->validate([
+            'accountNumber' => ['required', 'string', function ($attr, $value, $fail) {
+                if (! $this->recipientFound) {
+                    $fail('Recipient account not found.');
+                }
+            }],
+            'amount' => ['required', 'numeric', 'regex:/^\d+(\.\d{1,2})?$/', 'min:'.config('motera.limits.min_transfer')],
+            'description' => 'nullable|string|max:100',
             'pin' => 'required|digits:4',
         ]);
 
-        $sender = auth()->user();
+        try {
+            $this->idempotent($this->idempotencyKey, fn () => $action->execute(auth()->user(), [
+                'recipient_account_number' => $validated['accountNumber'],
+                'amount' => $validated['amount'],
+                'description' => $validated['description'] ?? null,
+                'pin' => $validated['pin'],
+            ]));
+        } catch (IdempotencyViolationException $e) {
+            session()->flash('info', 'This transfer was already submitted.');
+            $this->redirect(route('transactions.index'), navigate: true);
 
-        if (!\Illuminate\Support\Facades\Hash::check($this->pin, $sender->transaction_pin)) {
-            $this->addError('pin', 'Incorrect Transaction PIN.');
+            return;
+        } catch (InvalidPinException|TooManyPinAttemptsException $e) {
+            $this->addError('pin', $e->getMessage());
+
+            return;
+        } catch (InsufficientFundsException $e) {
+            $this->addError('amount', $e->getMessage());
+
+            return;
+        } catch (AccountRestrictedException $e) {
+            $this->addError('accountNumber', $e->getMessage());
+
+            return;
+        } catch (ThrottleRequestsException $e) {
+            $this->addError('amount', $e->getMessage());
+
             return;
         }
 
-        return $this->idempotent($this->idempotencyKey, function () use ($sender) {
-            return DB::transaction(function () use ($sender) {
-                // Determine locking order by ID to prevent deadlocks
-                $recipientAccount = BankAccount::where('account_number', $this->accountNumber)->first();
-                $senderAccount = $sender->primaryAccount;
-
-                if (!$senderAccount || !$recipientAccount) {
-                    throw new \Exception('Account not found.');
-                }
-
-                if ($senderAccount->id === $recipientAccount->id) {
-                    $this->addError('accountNumber', 'You cannot transfer to yourself.');
-                    return;
-                }
-
-                $firstId = $senderAccount->id < $recipientAccount->id ? $senderAccount->id : $recipientAccount->id;
-                $secondId = $senderAccount->id < $recipientAccount->id ? $recipientAccount->id : $senderAccount->id;
-
-                $lockedAccounts = BankAccount::whereIn('id', [$firstId, $secondId])
-                    ->lockForUpdate()
-                    ->get()
-                    ->keyBy('id');
-
-                $senderAccount = $lockedAccounts->get($senderAccount->id);
-                $recipientAccount = $lockedAccounts->get($recipientAccount->id);
-
-                if ($senderAccount->available_balance < $this->amount) {
-                    $this->addError('amount', 'Insufficient balance.');
-                    return;
-                }
-
-                $reference = 'TRF-' . strtoupper(Str::random(10));
-
-                // 1. Create High-Level Transaction Record
-                $transaction = Transaction::create([
-                    'user_id' => $sender->id,
-                    'bank_account_id' => $senderAccount->id,
-                    'type' => 'transfer',
-                    'amount' => $this->amount,
-                    'status' => 'completed',
-                    'reference' => $reference,
-                    'description' => $this->description ?? 'Internal Transfer',
-                    'metadata' => [
-                        'recipient_account_number' => $this->accountNumber,
-                        'recipient_name' => $recipientAccount->user->name,
-                        'idempotency_key' => $this->idempotencyKey,
-                    ],
-                ]);
-
-                // 2. Debit Sender
-                $senderAccount->decrement('available_balance', $this->amount);
-                $senderAccount->decrement('ledger_balance', $this->amount);
-                
-                LedgerEntry::create([
-                    'transaction_id' => $transaction->id,
-                    'bank_account_id' => $senderAccount->id,
-                    'type' => 'debit',
-                    'amount' => $this->amount,
-                    'description' => "Transfer to {$recipientAccount->user->name}: {$this->description}",
-                    'reference' => $reference,
-                    'balance_after' => $senderAccount->available_balance,
-                ]);
-
-                // 3. Credit Recipient
-                $recipientAccount->increment('available_balance', $this->amount);
-                $recipientAccount->increment('ledger_balance', $this->amount);
-                
-                LedgerEntry::create([
-                    'transaction_id' => $transaction->id,
-                    'bank_account_id' => $recipientAccount->id,
-                    'type' => 'credit',
-                    'amount' => $this->amount,
-                    'description' => "Transfer from {$sender->name}: {$this->description}",
-                    'reference' => $reference,
-                    'balance_after' => $recipientAccount->available_balance,
-                ]);
-
-                session()->flash('success', 'Transfer completed successfully!');
-                return redirect()->route('dashboard');
-            });
-        });
+        session()->flash('success', 'Transfer completed successfully!');
+        $this->redirect(route('transactions.index'), navigate: true);
     }
 }; ?>
 
@@ -151,17 +126,17 @@ new class extends Component {
 
             <form wire:submit="confirmTransfer" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Account Number</label>
+                    <label for="account-number" class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Account Number</label>
                     <div class="relative">
-                        <input type="text" wire:model.live.debounce.500ms="accountNumber" 
+                        <input id="account-number" type="text" wire:model.live.debounce.500ms="accountNumber"
                                class="w-full px-4 py-3 rounded-xl border-brand-border focus:ring-brand-primary focus:border-brand-primary text-sm bg-gray-50 transition-all"
                                placeholder="Enter 10-digit number">
-                        @if ($recipientName)
+                        @if ($recipientFound)
                             <div class="mt-2 p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-center gap-2">
                                 <div class="h-6 w-6 rounded-full bg-blue-600 flex items-center justify-center text-[10px] text-white font-bold">
                                     {{ substr($recipientName, 0, 1) }}
                                 </div>
-                                <span class="text-xs font-bold text-blue-700 uppercase tracking-tighter">{{ $recipientName }}</span>
+                                <span class="text-xs font-bold text-blue-700 uppercase tracking-tighter">Sending to: {{ $recipientName }}</span>
                             </div>
                         @endif
                     </div>
@@ -169,12 +144,12 @@ new class extends Component {
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Amount</label>
+                    <label for="amount" class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Amount</label>
                     <div class="relative">
                         <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <span class="text-gray-500 sm:text-sm font-bold">₦</span>
+                            <span class="text-gray-500 sm:text-sm font-bold">$</span>
                         </div>
-                        <input type="number" wire:model="amount" 
+                        <input id="amount" type="number" wire:model="amount"
                                class="w-full pl-10 pr-4 py-3 rounded-xl border-brand-border focus:ring-brand-primary focus:border-brand-primary text-sm bg-gray-50 transition-all"
                                placeholder="0.00">
                     </div>
@@ -182,17 +157,17 @@ new class extends Component {
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Description (Optional)</label>
-                    <input type="text" wire:model="description" 
+                    <label for="description" class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Description (Optional)</label>
+                    <input id="description" type="text" wire:model="description"
                            class="w-full px-4 py-3 rounded-xl border-brand-border focus:ring-brand-primary focus:border-brand-primary text-sm bg-gray-50 transition-all"
                            placeholder="e.g. For dinner">
                     @error('description') <span class="text-brand-danger text-xs mt-1 block">{{ $message }}</span> @enderror
                 </div>
 
                 <div class="pt-4">
-                    <button type="submit" 
+                    <button type="submit"
                             class="btn-primary w-full shadow-lg shadow-blue-100"
-                            {{ !$recipientName ? 'disabled' : '' }}>
+                            {{ !$recipientFound ? 'disabled' : '' }}>
                         Continue
                     </button>
                 </div>
@@ -208,7 +183,7 @@ new class extends Component {
             <div class="bg-slate-50 rounded-2xl p-6 mb-6 border border-brand-border">
                 <div class="text-center mb-6">
                     <p class="text-[10px] uppercase font-bold text-brand-text-secondary tracking-widest mb-1">Send exactly</p>
-                    <h4 class="text-3xl font-black text-brand-primary">₦{{ number_format($amount, 2) }}</h4>
+                    <h4 class="text-3xl font-black text-brand-primary">${{ number_format($amount, 2) }}</h4>
                 </div>
 
                 <div class="space-y-3 pt-4 border-t border-brand-border text-sm">
@@ -235,8 +210,8 @@ new class extends Component {
 
             <form wire:submit="processTransfer" class="space-y-5">
                 <div>
-                    <label class="block text-sm font-semibold text-brand-text-primary mb-2">Transaction PIN</label>
-                    <input type="password" wire:model="pin" maxlength="4" class="block w-full px-4 py-4 rounded-2xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-center tracking-[1em] text-lg transition-all" placeholder="••••">
+                    <label for="pin" class="block text-sm font-semibold text-brand-text-primary mb-2">Transaction PIN</label>
+                    <input id="pin" type="password" wire:model="pin" maxlength="4" class="block w-full px-4 py-4 rounded-2xl border-brand-border bg-white focus:ring-brand-primary focus:border-brand-primary text-center tracking-[1em] text-lg transition-all" placeholder="••••">
                     @error('pin') <span class="text-xs text-brand-danger mt-1 block">{{ $message }}</span> @enderror
                 </div>
 

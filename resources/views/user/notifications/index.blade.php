@@ -4,6 +4,6 @@
     </x-slot>
 
     <div class="space-y-6">
-        @livewire('notifications.⚡notification-inbox')
+        <livewire:notifications.⚡notification-inbox />
     </div>
 </x-customer-layout>

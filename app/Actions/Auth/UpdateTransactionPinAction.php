@@ -10,6 +10,9 @@ class UpdateTransactionPinAction extends BaseAction
 {
     /**
      * Execute the PIN update action.
+     *
+     * This is the single writer of the transaction PIN column. The column
+     * is intentionally NOT mass-assignable, hence forceFill().
      */
     public function execute(mixed ...$args): User
     {
@@ -17,9 +20,9 @@ class UpdateTransactionPinAction extends BaseAction
         $user = $args[0];
         $pin = $args[1];
 
-        $user->update([
+        $user->forceFill([
             'transaction_pin' => Hash::make($pin),
-        ]);
+        ])->save();
 
         return $user;
     }

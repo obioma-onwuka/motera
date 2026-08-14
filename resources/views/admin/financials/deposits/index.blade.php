@@ -5,6 +5,6 @@
     </x-slot>
 
     <div class="space-y-6">
-        <livewire:admin.financials.deposit-review-list />
+        <livewire:admin.financials.⚡deposit-review-list />
     </div>
 </x-admin-layout>

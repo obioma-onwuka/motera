@@ -1,31 +1,34 @@
 <?php
 
 use Livewire\Volt\Component;
+use Livewire\WithPagination;
 use Illuminate\Support\Facades\Auth;
 
 new class extends Component
 {
+    use WithPagination;
+
     public function with()
     {
         return [
-            'notifications' => Auth::user()->notifications()->latest()->get(),
+            'notifications' => Auth::user()->notifications()->latest()->paginate(20),
         ];
     }
 
     public function markAsRead($id)
     {
-        Auth::user()->notifications()->find($id)->markAsRead();
+        Auth::user()->notifications()->find($id)?->markAsRead();
     }
 
     public function markAllAsRead()
     {
-        Auth::user()->unreadNotifications->markAsRead();
+        Auth::user()->unreadNotifications()->update(['read_at' => now()]);
     }
 };
 ?>
 
 <div class="space-y-6">
-    @if(Auth::user()->unreadNotifications->count() > 0)
+    @if(Auth::user()->unreadNotifications()->count() > 0)
         <div class="flex justify-end">
             <button wire:click="markAllAsRead" class="text-xs font-bold text-brand-primary hover:underline">Mark all as read</button>
         </div>
@@ -34,7 +37,7 @@ new class extends Component
     <div class="bg-white rounded-3xl overflow-hidden border border-brand-border shadow-sm">
         <div class="divide-y divide-brand-border">
             @forelse($notifications as $notification)
-                <div class="p-6 flex items-start gap-4 hover:bg-slate-50 transition-colors {{ $notification->read_at ? 'opacity-60' : '' }}">
+                <div wire:key="notification-{{ $notification->id }}" class="p-6 flex items-start gap-4 hover:bg-slate-50 transition-colors {{ $notification->read_at ? 'opacity-60' : '' }}">
                     <div class="h-10 w-10 rounded-2xl bg-blue-50 text-brand-primary flex items-center justify-center flex-shrink-0">
                         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                     </div>
@@ -59,5 +62,10 @@ new class extends Component
                 </div>
             @endforelse
         </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pt-4">
+        {{ $notifications->links() }}
     </div>
 </div>

@@ -56,31 +56,31 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'role:Super Admin|Operations Admin|Compliance Admin|Support Admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', function () {
         return view('admin.dashboard');
-    })->name('dashboard');
+    })->middleware('permission:view-metrics')->name('dashboard');
 
     Route::get('/compliance/kyc', function () {
         return view('admin.compliance.kyc.index');
-    })->name('compliance.kyc.index');
+    })->middleware('permission:review-kyc')->name('compliance.kyc.index');
 
     Route::get('/financials/deposits', function () {
         return view('admin.financials.deposits.index');
-    })->name('financials.deposits.index');
+    })->middleware('permission:approve-deposits')->name('financials.deposits.index');
 
     Route::get('/financials/withdrawals', function () {
         return view('admin.financials.withdrawals.index');
-    })->name('financials.withdrawals.index');
+    })->middleware('permission:approve-withdrawals')->name('financials.withdrawals.index');
 
     Route::get('/billers', function () {
         return view('admin.billers.index');
-    })->name('billers.index');
+    })->middleware('permission:manage-billers')->name('billers.index');
 
     Route::get('/customers', function () {
         return view('admin.customers.index');
-    })->name('customers.index');
+    })->middleware('permission:view-customers')->name('customers.index');
 
     Route::get('/audit-logs', function () {
         return view('admin.audit-logs.index');
-    })->name('audit-logs.index');
+    })->middleware('permission:view-audit-logs')->name('audit-logs.index');
 });
 
 require __DIR__.'/auth.php';

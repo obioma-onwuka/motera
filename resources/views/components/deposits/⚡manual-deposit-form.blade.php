@@ -3,6 +3,7 @@
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
 use App\Actions\Deposits\RequestDepositAction;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Support\Facades\Auth;
 
 new class extends Component
@@ -12,23 +13,32 @@ new class extends Component
     public $amount;
     public $proof;
 
-    protected $rules = [
-        'amount' => 'required|numeric|min:100',
-        'proof' => 'required|image|max:2048', // 2MB max
-    ];
+    protected function rules()
+    {
+        return [
+            'amount' => 'required|numeric|min:'.config('motera.limits.min_deposit'),
+            'proof' => 'required|image|max:2048', // 2MB max
+        ];
+    }
 
     public function submit(RequestDepositAction $action)
     {
         $this->validate();
 
-        $action->execute(Auth::user(), [
-            'amount' => $this->amount,
-            'proof' => $this->proof,
-        ]);
+        try {
+            $action->execute(Auth::user(), [
+                'amount' => $this->amount,
+                'proof' => $this->proof,
+            ]);
 
-        session()->flash('success', 'Deposit request submitted successfully! An admin will review it shortly.');
+            session()->flash('success', 'Deposit request submitted successfully! An admin will review it shortly.');
 
-        return redirect()->route('dashboard');
+            return redirect()->route('dashboard');
+        } catch (ThrottleRequestsException $e) {
+            $this->addError('amount', $e->getMessage());
+        } catch (\Exception $e) {
+            $this->addError('amount', 'Something went wrong. Please try again.');
+        }
     }
 };
 ?>
@@ -38,9 +48,9 @@ new class extends Component
         <form wire:submit="submit" class="space-y-6">
             <!-- Amount Input -->
             <div>
-                <label for="amount" class="block text-sm font-semibold text-brand-text-primary mb-2">Amount to Deposit (₦)</label>
+                <label for="amount" class="block text-sm font-semibold text-brand-text-primary mb-2">Amount to Deposit ($)</label>
                 <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-brand-text-secondary font-bold">₦</div>
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-brand-text-secondary font-bold">$</div>
                     <input type="number" wire:model="amount" id="amount" class="block w-full pl-10 pr-4 py-4 rounded-2xl border-brand-border focus:ring-brand-primary focus:border-brand-primary placeholder-gray-400" placeholder="0.00">
                 </div>
                 @error('amount') <span class="text-xs text-brand-danger mt-1">{{ $message }}</span> @enderror
@@ -48,7 +58,7 @@ new class extends Component
 
             <!-- Proof Upload -->
             <div>
-                <label class="block text-sm font-semibold text-brand-text-primary mb-2">Upload Proof of Payment</label>
+                <label for="file-upload" class="block text-sm font-semibold text-brand-text-primary mb-2">Upload Proof of Payment</label>
                 <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-brand-border border-dashed rounded-2xl bg-slate-50 relative">
                     <div class="space-y-1 text-center">
                         @if ($proof)

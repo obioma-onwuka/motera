@@ -3,19 +3,22 @@
 use Livewire\Volt\Component;
 use App\Models\User;
 use App\Models\BankAccount;
-use App\Models\LedgerEntry;
+use App\Models\Transaction;
 use App\Models\KycSubmission;
 use App\Models\DepositRequest;
 use App\Models\WithdrawalRequest;
+use App\Enums\TransactionStatus;
 use Spatie\Activitylog\Models\Activity;
 
 new class extends Component {
     public function with()
     {
+        $this->authorize('view-metrics');
+
         return [
             'totalUsers' => User::count(),
             'totalAssets' => BankAccount::sum('ledger_balance'),
-            'transactionVolume' => LedgerEntry::sum('amount'),
+            'transactionVolume' => Transaction::where('status', TransactionStatus::SUCCESSFUL)->sum('amount'),
             'pendingKyc' => KycSubmission::where('status', 'pending')->count(),
             'pendingDeposits' => DepositRequest::where('status', 'pending')->count(),
             'pendingWithdrawals' => WithdrawalRequest::where('status', 'pending')->count(),
@@ -37,12 +40,12 @@ new class extends Component {
 
         <div class="bg-white p-6 rounded-[2rem] border border-brand-border shadow-sm">
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Fluidity</p>
-            <h3 class="text-3xl font-black text-blue-600 tracking-tight">₦{{ number_format($totalAssets, 2) }}</h3>
+            <h3 class="text-3xl font-black text-blue-600 tracking-tight">${{ number_format($totalAssets, 2) }}</h3>
         </div>
 
         <div class="bg-white p-6 rounded-[2rem] border border-brand-border shadow-sm">
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Processed Volume</p>
-            <h3 class="text-2xl font-black text-slate-700 tracking-tight">₦{{ number_format($transactionVolume, 2) }}</h3>
+            <h3 class="text-2xl font-black text-slate-700 tracking-tight">${{ number_format($transactionVolume, 2) }}</h3>
         </div>
 
         <div class="bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl">

@@ -3,101 +3,119 @@
 namespace App\Actions\Transfers;
 
 use App\Actions\BaseAction;
-use App\Data\Transfers\InitiateTransferData;
+use App\Enums\TransactionStatus;
+use App\Exceptions\InsufficientFundsException;
 use App\Models\BankAccount;
 use App\Models\Transaction;
-use App\Models\LedgerEntry;
+use App\Models\User;
+use App\Notifications\TransferReceivedNotification;
+use App\Notifications\TransferSentNotification;
+use App\Services\LedgerService;
+use App\Services\NameMasker;
 use App\Services\ReferenceGenerator;
+use App\Services\TransactionPinService;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Support\Facades\DB;
-use Exception;
-use App\Enums\TransactionStatus;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\ValidationException;
 
 class InitiateInternalTransferAction extends BaseAction
 {
     /**
-     * Execute the internal transfer action with deadlock prevention.
+     * Execute the internal transfer action.
+     *
+     * @param  User  $sender
+     * @param  array{recipient_account_number: string, amount: string, description: string|null, pin: string}  $data
      */
     public function execute(mixed ...$args): Transaction
     {
-        /** @var InitiateTransferData $data */
-        $data = $args[0];
+        /** @var User $sender */
+        $sender = $args[0];
+        /** @var array $data */
+        $data = $args[1];
 
-        return DB::transaction(function () use ($data) {
-            $sender = BankAccount::findOrFail($data->sender_account_id);
-            $receiver = BankAccount::where('account_number', $data->receiver_account_number)->firstOrFail();
+        $result = RateLimiter::attempt(
+            "transfers:{$sender->id}",
+            5,
+            fn () => DB::transaction(function () use ($sender, $data) {
+                app(TransactionPinService::class)->verify($sender, $data['pin'], 'transfer');
 
-            if ($sender->id === $receiver->id) {
-                throw new Exception("You cannot transfer to the same account.");
-            }
+                // Ownership is structural: the sender's own primary account is
+                // derived from the authenticated user, never from user input.
+                $senderAccount = BankAccount::where('user_id', $sender->id)
+                    ->oldest('created_at')
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            // Prevent deadlocks by sorting locks by UUID
-            $firstId = $sender->id < $receiver->id ? $sender->id : $receiver->id;
-            $secondId = $sender->id < $receiver->id ? $receiver->id : $sender->id;
+                $senderAccount->assertNotRestricted();
 
-            $locked = BankAccount::whereIn('id', [$firstId, $secondId])
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
+                $recipientAccount = BankAccount::where('account_number', $data['recipient_account_number'])
+                    ->lockForUpdate()
+                    ->first();
 
-            $senderAccount = $locked->get($sender->id);
-            $receiverAccount = $locked->get($receiver->id);
+                if (! $recipientAccount) {
+                    throw ValidationException::withMessages([
+                        'accountNumber' => 'Recipient account not found.',
+                    ]);
+                }
 
-            if ($senderAccount->is_restricted) {
-                throw new Exception("Account restricted. Please contact support.");
-            }
+                if ($recipientAccount->id === $senderAccount->id) {
+                    throw ValidationException::withMessages([
+                        'accountNumber' => 'You cannot transfer to your own account.',
+                    ]);
+                }
 
-            if ($senderAccount->available_balance < $data->amount) {
-                throw new Exception("Insufficient available balance.");
-            }
+                // Re-check the balance after acquiring the row lock.
+                if ($senderAccount->available_balance < $data['amount']) {
+                    throw new InsufficientFundsException('Insufficient available balance.');
+                }
 
-            $reference = ReferenceGenerator::generate('TRF');
+                $recipientUser = $recipientAccount->user;
 
-            // 1. Create Transaction record
-            $transaction = Transaction::create([
-                'user_id' => $senderAccount->user_id,
-                'bank_account_id' => $senderAccount->id,
-                'reference' => $reference,
-                'type' => 'transfer',
-                'amount' => $data->amount,
-                'status' => TransactionStatus::SUCCESSFUL,
-                'description' => $data->description ?? "Transfer to {$receiverAccount->account_number}",
-                'metadata' => [
-                    'recipient_account_id' => $receiverAccount->id,
-                    'recipient_account_number' => $receiverAccount->account_number,
-                ],
-            ]);
+                $tx = Transaction::create([
+                    'user_id' => $sender->id,
+                    'bank_account_id' => $senderAccount->id,
+                    'reference' => ReferenceGenerator::generate(
+                        'TRF',
+                        fn ($r) => Transaction::where('reference', $r)->exists()
+                    ),
+                    'type' => 'transfer',
+                    'amount' => $data['amount'],
+                    'status' => TransactionStatus::SUCCESSFUL,
+                    'description' => $data['description'] ?? null,
+                    'metadata' => [
+                        'recipient_name' => NameMasker::mask($recipientUser->name),
+                        'recipient_account_number' => $recipientAccount->account_number,
+                        'sender_name' => $sender->name,
+                    ],
+                ]);
 
-            // 2. Create Ledger Entries
-            // Debit Sender
-            LedgerEntry::create([
-                'transaction_id' => $transaction->id,
-                'bank_account_id' => $senderAccount->id,
-                'type' => 'debit',
-                'amount' => $data->amount,
-                'reference' => $reference,
-                'balance_after' => $senderAccount->available_balance - $data->amount,
-                'description' => "Transfer to {$receiverAccount->account_number}",
-            ]);
+                app(LedgerService::class)->debit(
+                    $tx,
+                    $senderAccount,
+                    $data['amount'],
+                    'Transfer to '.$recipientAccount->account_number
+                );
 
-            // Credit Receiver
-            LedgerEntry::create([
-                'transaction_id' => $transaction->id,
-                'bank_account_id' => $receiverAccount->id,
-                'type' => 'credit',
-                'amount' => $data->amount,
-                'reference' => $reference,
-                'balance_after' => $receiverAccount->available_balance + $data->amount,
-                'description' => "Transfer from {$senderAccount->account_number}",
-            ]);
+                app(LedgerService::class)->credit(
+                    $tx,
+                    $recipientAccount,
+                    $data['amount'],
+                    'Transfer from '.$senderAccount->account_number
+                );
 
-            // 3. Update Balances
-            $senderAccount->decrement('ledger_balance', $data->amount);
-            $senderAccount->decrement('available_balance', $data->amount);
+                DB::afterCommit(fn () => $sender->notify(new TransferSentNotification($tx, $recipientAccount)));
+                DB::afterCommit(fn () => $recipientUser->notify(new TransferReceivedNotification($tx, $senderAccount)));
 
-            $receiverAccount->increment('ledger_balance', $data->amount);
-            $receiverAccount->increment('available_balance', $data->amount);
+                return $tx;
+            }),
+            60
+        );
 
-            return $transaction;
-        });
+        if ($result === false) {
+            throw new ThrottleRequestsException('Too many transfer attempts. Please try again shortly.');
+        }
+
+        return $result;
     }
 }

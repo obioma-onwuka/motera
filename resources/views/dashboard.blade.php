@@ -2,12 +2,12 @@
     <x-slot name="header">
         <div class="flex items-center justify-between">
             <div>
-                <h2 class="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Good day, {{ explode(' ', auth()->user()->name)[0] }}!</h2>
+                <h2 class="text-2xl font-black text-gray-900  tracking-tight">Good day, {{ explode(' ', auth()->user()->name)[0] }}!</h2>
                 <p class="text-xs text-gray-500 font-medium mt-1">Welcome back to your MOTERA dashboard.</p>
             </div>
             <div class="flex items-center gap-2">
                 <div class="flex -space-x-2">
-                    <div class="h-8 w-8 rounded-full border-2 border-white bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600">Tier {{ auth()->user()->primaryAccount?->tier ?? 1 }}</div>
+                    <div class="h-8 w-8 rounded-full border-2 border-white bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600">{{ ucwords(str_replace('_', ' ', auth()->user()->primaryAccount?->tier?->value ?? 'tier_1')) }}</div>
                 </div>
             </div>
         </div>
@@ -35,7 +35,7 @@
                 </div>
                 <div class="absolute -right-10 -bottom-10 h-32 w-32 bg-white/10 rounded-full"></div>
             </div>
-        @elseif($kyc->status === 'pending')
+        @elseif($kyc->status->value === 'pending')
              <div class="p-5 bg-blue-50 border border-blue-100 rounded-3xl flex items-center gap-4">
                 <div class="h-12 w-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center">
                     <svg class="h-7 w-7 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
@@ -56,7 +56,7 @@
                         <div>
                             <p class="text-[10px] font-black uppercase tracking-[0.2em] text-blue-200 opacity-80">Available Balance</p>
                             <h3 class="mt-1 text-4xl font-black tracking-tighter">
-                                <span class="text-2xl font-medium opacity-80">₦</span>
+                                <span class="text-2xl font-medium opacity-80">$</span>
                                 {{ number_format(auth()->user()->primaryAccount?->available_balance ?? 0, 2) }}
                             </h3>
                         </div>
@@ -83,7 +83,7 @@
                  <div class="relative z-10">
                     <p class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-6">Savings Pocket</p>
                     <h3 class="text-3xl font-black tracking-tighter mb-10">
-                        <span class="text-xl font-medium opacity-50">₦</span>0.00
+                        <span class="text-xl font-medium opacity-50">$</span>0.00
                     </h3>
                     <div class="flex items-center gap-2">
                         <span class="px-3 py-1 bg-white/10 rounded-full text-[10px] font-black">LOCKED</span>

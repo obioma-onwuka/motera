@@ -5,33 +5,41 @@ use Livewire\Volt\Component;
 new class extends Component {
     public function getTiers()
     {
+        $currentTier = auth()->user()?->primaryAccount?->tier?->value;
+
         return [
             [
                 'id' => 'tier_1',
                 'name' => 'Tier 1 (Starter)',
-                'limit' => '₦50,000',
-                'color' => 'blue',
+                'limit' => '$'.number_format(config('motera.limits.tier_limits.tier_1')),
+                'iconClass' => 'bg-blue-50 text-blue-600',
+                'limitClass' => 'text-blue-600',
+                'checkClass' => 'text-blue-400',
                 'requirements' => ['Email Verification', 'Phone Number'],
                 'features' => ['Local Transfers', 'Bill Payments'],
-                'status' => auth()->user()->primaryAccount->tier === 'tier_1' ? 'current' : 'completed'
+                'status' => $currentTier === 'tier_1' ? 'current' : 'completed'
             ],
             [
                 'id' => 'tier_2',
                 'name' => 'Tier 2 (Silver)',
-                'limit' => '₦500,000',
-                'color' => 'teal',
+                'limit' => '$'.number_format(config('motera.limits.tier_limits.tier_2')),
+                'iconClass' => 'bg-teal-50 text-teal-600',
+                'limitClass' => 'text-teal-600',
+                'checkClass' => 'text-teal-400',
                 'requirements' => ['BVN Verification', 'Identity Document'],
                 'features' => ['Higher Limits', 'Debit Cards'],
-                'status' => auth()->user()->primaryAccount->tier === 'tier_2' ? 'current' : (auth()->user()->primaryAccount->tier === 'tier_1' ? 'available' : 'completed')
+                'status' => $currentTier === 'tier_2' ? 'current' : ($currentTier === 'tier_1' ? 'available' : 'completed')
             ],
             [
                 'id' => 'tier_3',
                 'name' => 'Tier 3 (Gold)',
-                'limit' => '₦5,000,000',
-                'color' => 'purple',
+                'limit' => '$'.number_format(config('motera.limits.tier_limits.tier_3')),
+                'iconClass' => 'bg-purple-50 text-purple-600',
+                'limitClass' => 'text-purple-600',
+                'checkClass' => 'text-purple-400',
                 'requirements' => ['Proof of Address', 'Physical Verification'],
                 'features' => ['Global Cards', 'Investment Access'],
-                'status' => auth()->user()->primaryAccount->tier === 'tier_3' ? 'current' : 'available'
+                'status' => $currentTier === 'tier_3' ? 'current' : 'available'
             ]
         ];
     }
@@ -43,7 +51,7 @@ new class extends Component {
             <div class="relative overflow-hidden bg-white p-6 rounded-[2.5rem] border {{ $tier['status'] === 'current' ? 'border-brand-primary ring-4 ring-blue-50' : 'border-brand-border' }} transition-all shadow-sm">
                 <!-- Status Badge -->
                 <div class="flex justify-between items-start mb-6">
-                    <div class="h-12 w-12 rounded-2xl bg-{{ $tier['color'] }}-50 text-{{ $tier['color'] }}-600 flex items-center justify-center">
+                    <div class="h-12 w-12 rounded-2xl {{ $tier['iconClass'] }} flex items-center justify-center">
                         <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>
                     </div>
                     @if($tier['status'] === 'current')
@@ -54,15 +62,15 @@ new class extends Component {
                 </div>
 
                 <h4 class="text-xl font-black text-gray-900 mb-1">{{ $tier['name'] }}</h4>
-                <p class="text-xs text-gray-500 font-medium mb-6">Daily Limit: <span class="text-{{ $tier['color'] }}-600 font-bold">{{ $tier['limit'] }}</span></p>
-                
+                <p class="text-xs text-gray-500 font-medium mb-6">Daily Limit: <span class="{{ $tier['limitClass'] }} font-bold">{{ $tier['limit'] }}</span></p>
+
                 <div class="space-y-4 mb-8">
                     <div>
                         <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Requirements</p>
                         <ul class="space-y-2">
                             @foreach($tier['requirements'] as $req)
                                 <li class="flex items-center gap-2 text-xs font-medium text-gray-700">
-                                    <svg class="h-3.5 w-3.5 text-{{ $tier['color'] }}-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
+                                    <svg class="h-3.5 w-3.5 {{ $tier['checkClass'] }}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
                                     {{ $req }}
                                 </li>
                             @endforeach

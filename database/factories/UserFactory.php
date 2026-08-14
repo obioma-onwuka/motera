@@ -42,4 +42,14 @@ class UserFactory extends Factory
             'email_verified_at' => null,
         ]);
     }
+
+    /**
+     * Set a transaction PIN on the user (hashed, default 1234).
+     */
+    public function withPin(string $pin = '1234'): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'transaction_pin' => Hash::make($pin),
+        ]);
+    }
 }

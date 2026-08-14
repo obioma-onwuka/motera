@@ -3,11 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BillPayment extends Model
 {
-    use HasUuids;
+    use HasFactory, HasUuids;
 
     protected $fillable = [
         'user_id',
@@ -25,17 +27,17 @@ class BillPayment extends Model
         'metadata' => 'array',
     ];
 
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function bankAccount()
+    public function bankAccount(): BelongsTo
     {
         return $this->belongsTo(BankAccount::class);
     }
 
-    public function biller()
+    public function biller(): BelongsTo
     {
         return $this->belongsTo(Biller::class);
     }
