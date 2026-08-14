@@ -76,7 +76,7 @@ new class extends Component {
 }; ?>
 
 <div class="space-y-6">
-    <x-admin.chart-card
+    <x-chart-card
         title="Account Tier Distribution"
         subtitle="Bank accounts by KYC tier"
         canvas-id="admin-tier-donut"

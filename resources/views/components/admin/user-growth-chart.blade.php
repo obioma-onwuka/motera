@@ -54,7 +54,7 @@ new class extends Component {
     }
 }; ?>
 
-<x-admin.chart-card
+<x-chart-card
     title="User Growth"
     subtitle="Signups per day, last 30 days"
     canvas-id="admin-user-growth-chart"

@@ -48,7 +48,15 @@
       "Bash(php -l \"resources/views/components/admin/⚡deposit-withdrawal-chart.blade.php\")",
       "Bash(php -l \"resources/views/components/admin/⚡tier-donut.blade.php\")",
       "Bash(php -l \"resources/views/components/admin/⚡user-growth-chart.blade.php\")",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(git fetch *)",
+      "Bash(git mv *)",
+      "Bash(sed -i 's/<x-admin\\\\.chart-card/<x-chart-card/g' resources/views/components/admin/volume-chart.blade.php resources/views/components/admin/deposit-withdrawal-chart.blade.php resources/views/components/admin/tier-donut.blade.php resources/views/components/admin/user-growth-chart.blade.php)",
+      "Bash(git -C \"C:\\\\Users\\\\obiom\\\\Desktop\\\\backend\\\\motera\" branch -a)",
+      "Bash(php -l resources/views/components/dashboard/stats-row.blade.php)",
+      "Bash(php -l resources/views/components/dashboard/cashflow-chart.blade.php)",
+      "Bash(php -l resources/views/components/dashboard/tier-progress.blade.php)",
+      "Bash(php -l resources/views/dashboard.blade.php)"
     ]
   }
 }
